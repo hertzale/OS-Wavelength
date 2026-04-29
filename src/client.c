@@ -51,12 +51,13 @@ int main(int argc, char *argv[]) {
             while (1) {
                 printf("%s", pkt.text);
                 if (fgets(input, sizeof(input), stdin) != NULL) {
-                    if (sscanf(input, "%d", &choice) == 1 && choice >= 1 && choice <= 10) {
+                    // Removed the rigid 1-10 check! The server will now handle all validation.
+                    if (sscanf(input, "%d", &choice) == 1) { 
                         NetPacket resp; sprintf(resp.text, "%d", choice);
                         send(sock, &resp, sizeof(NetPacket), 0); break;
                     }
                 }
-                printf("Invalid input. Enter a number between 1 and 10.\n");
+                printf("Invalid input. Please enter a valid number.\n");
             }
         } 
         else if (pkt.cmd == 3) {

@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <time.h>
 
+#define PORT 8888
+
 typedef struct {
     int cmd; 
     char text[2048];
@@ -39,9 +41,19 @@ void net_print(int sock, const char* msg) {
 void net_clear(int sock) {
     NetPacket p; p.cmd = 1; send(sock, &p, sizeof(NetPacket), 0);
 }
-int net_ask_int(int sock, const char* prompt) {
-    NetPacket p; p.cmd = 2; strcpy(p.text, prompt); send(sock, &p, sizeof(NetPacket), 0);
-    recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); return atoi(p.text);
+int net_ask_int(int sock, const char* prompt, int min, int max) {
+    NetPacket p; 
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+    
+    while(1) {
+        p.cmd = 2; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
+        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); 
+        int val = atoi(p.text);
+        if (val >= min && val <= max) return val;
+        
+        sprintf(input_prompt, "Invalid! Enter a number between %d and %d.\n%s", min, max, prompt);
+    }
 }
 void net_ask_str(int sock, const char* prompt, char* out) {
     NetPacket p; p.cmd = 3; strcpy(p.text, prompt); send(sock, &p, sizeof(NetPacket), 0);
@@ -50,8 +62,24 @@ void net_ask_str(int sock, const char* prompt, char* out) {
 void broadcast(int sock, const char* msg) {
     printf("%s", msg); net_print(sock, msg);
 }
-void broadcast_clear(int sock) {
-    system("clear"); net_clear(sock);
+
+void draw_banners(int client_sock, int r, int host_is_psychic) {
+    system("clear"); net_clear(client_sock);
+    
+    char host_buf[512], client_buf[512];
+    sprintf(host_buf, 
+        "======================================================\n"
+        "       MATCH MY FREQ  |  ROUND %d  |  YOU ARE: %s     \n"
+        "======================================================\n\n", 
+        r, host_is_psychic ? "PSYCHIC" : "SURMISER");
+    printf("%s", host_buf);
+
+    sprintf(client_buf, 
+        "======================================================\n"
+        "       MATCH MY FREQ  |  ROUND %d  |  YOU ARE: %s     \n"
+        "======================================================\n\n", 
+        r, !host_is_psychic ? "PSYCHIC" : "SURMISER");
+    net_print(client_sock, client_buf);
 }
 
 void format_scale(char* buffer, int target, int guess) {
@@ -108,11 +136,11 @@ int main(int argc, char *argv[]) {
     system("clear");
     printf("\n*** MATCH MY FREQ - SERVER ***\n");
     printf("Waiting for the Client terminal to connect on port %d...\n", port);
-    client_sock = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen);
+    client_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
     char host_name[50], client_name[50], p1_name[50], p2_name[50], buf[1024];
 
-    broadcast_clear(client_sock);
+    system("clear"); net_clear(client_sock);
     
     net_print(client_sock, "Input names:\nWaiting for Host...\n");
     get_local_str("Input names:\nPLAYER 1: ", host_name, 50);
@@ -127,129 +155,193 @@ int main(int argc, char *argv[]) {
         strcpy(p1_name, client_name); strcpy(p2_name, host_name);
     }
 
-    int p1_total = 0, p2_total = 0;
-    int curr_category = -1;
+    while (1) {
+        int p1_total = 0, p2_total = 0;
+        int curr_category = -1;
 
-    for (int r = 1; r <= 5; r++) {
-        int p1_is_psychic = (r % 2 != 0); 
-        int host_is_psychic = (p1_is_psychic && host_is_p1) || (!p1_is_psychic && !host_is_p1);
-        
-        char* psychic_name = p1_is_psychic ? p1_name : p2_name;
-        char* surmiser_name = p1_is_psychic ? p2_name : p1_name;
-
-        broadcast_clear(client_sock);
-        broadcast(client_sock, "ROLES FOR THIS ROUND!\n\n");
-        sprintf(buf, "PLAYER %d (%s) is the PSYCHIC\n", p1_is_psychic ? 1 : 2, psychic_name); broadcast(client_sock, buf);
-        sprintf(buf, "PLAYER %d (%s) is the SURMISER\n\n", p1_is_psychic ? 2 : 1, surmiser_name); broadcast(client_sock, buf);
-        broadcast(client_sock, "The PSYCHIC will pick the category by entering the number.\n\n");
-        sleep(2);
-
-        if (curr_category == -1) {
-            broadcast_clear(client_sock);
-            broadcast(client_sock, "PICK A CATEGORY!\nCategory List\n\n");
+        for (int r = 1; r <= 5; r++) {
+            int p1_is_psychic = (r % 2 != 0); 
+            int host_is_psychic = (p1_is_psychic && host_is_p1) || (!p1_is_psychic && !host_is_p1);
             
-            for (int i = 0; i < NUM_SPECTRUMS; i++) {
-                sprintf(buf, "[%d] %s - %s\n", i, SPECTRUMS[i].left, SPECTRUMS[i].right);
-                broadcast(client_sock, buf);
+            char* psychic_name = p1_is_psychic ? p1_name : p2_name;
+            char* surmiser_name = p1_is_psychic ? p2_name : p1_name;
+
+            draw_banners(client_sock, r, host_is_psychic);
+            
+            sprintf(buf, 
+                "+----------------------------------------------------+\n"
+                "| [ROLES FOR THIS ROUND]                             |\n"
+                "| PSYCHIC : %-30s (P%d) |\n"
+                "| SURMISER: %-30s (P%d) |\n"
+                "+----------------------------------------------------+\n\n", 
+                psychic_name, p1_is_psychic ? 1 : 2, surmiser_name, p1_is_psychic ? 2 : 1);
+            broadcast(client_sock, buf);
+            
+            broadcast(client_sock, 
+                "+----------------------------------------------------+\n"
+                "| [INSTRUCTION]                                      |\n"
+                "| The PSYCHIC will pick the category number.         |\n"
+                "+----------------------------------------------------+\n\n");
+            sleep(2);
+
+            if (curr_category == -1) {
+                for (int i = 0; i < NUM_SPECTRUMS; i++) {
+                    sprintf(buf, "[%2d] %s - %s\n", i+1, SPECTRUMS[i].left, SPECTRUMS[i].right);
+                    broadcast(client_sock, buf);
+                }
+                
+                if (host_is_psychic) {
+                    net_print(client_sock, "\nWaiting for PSYCHIC to pick...\n"); 
+                    curr_category = get_local_int("\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
+                } else {
+                    printf("\nWaiting for PSYCHIC to pick...\n"); 
+                    curr_category = net_ask_int(client_sock, "\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
+                }
             }
-            
+
+            Spectrum spec = SPECTRUMS[curr_category];
+            int target = (rand() % 10) + 1;
+            char clue[256];
+            char scale_buf[256];
+
+            draw_banners(client_sock, r, host_is_psychic);
+            sprintf(buf, "[ %s <---> %s ]\n\n", spec.left, spec.right); broadcast(client_sock, buf);
+
             if (host_is_psychic) {
-                net_print(client_sock, "\nWaiting for PSYCHIC to pick...\n"); 
-                curr_category = get_local_int("\nCategory Number: ", 0, NUM_SPECTRUMS - 1);
+                sprintf(buf, "Target Number: %d\n", target); printf("%s", buf);
+                format_scale(scale_buf, target, 0); printf("%s\n", scale_buf); 
+                
+                printf("+----------------------------------------------------+\n"
+                       "| [INSTRUCTION]                                      |\n"
+                       "| Give a clue to help SURMISER guess the target.     |\n"
+                       "+----------------------------------------------------+\n\n");
+                net_print(client_sock, "Waiting for Psychic to see target and formulate clue...\n"); 
+                
+                get_local_str("Psychic's Clue: ", clue, 256);
             } else {
-                printf("\nWaiting for PSYCHIC to pick...\n"); 
-                curr_category = net_ask_int(client_sock, "\nCategory Number: ");
+                sprintf(buf, "Target Number: %d\n", target); net_print(client_sock, buf);
+                format_scale(scale_buf, target, 0); net_print(client_sock, scale_buf); 
+                
+                net_print(client_sock, 
+                       "+----------------------------------------------------+\n"
+                       "| [INSTRUCTION]                                      |\n"
+                       "| Give a clue to help SURMISER guess the target.     |\n"
+                       "+----------------------------------------------------+\n\n");
+                printf("Waiting for Psychic to see target and formulate clue...\n"); 
+                
+                net_ask_str(client_sock, "Psychic's Clue: ", clue);
+            }
+
+            draw_banners(client_sock, r, host_is_psychic);
+            sprintf(buf, "[ %s <---> %s ]\n\n", spec.left, spec.right); broadcast(client_sock, buf);
+            sprintf(buf, "Psychic's Clue: %s\n\n", clue); broadcast(client_sock, buf);
+
+            int guess = 0;
+            if (!host_is_psychic) { 
+                format_scale(scale_buf, 0, 0); printf("%s\n", scale_buf); 
+                printf("+----------------------------------------------------+\n"
+                       "| [INSTRUCTION]                                      |\n"
+                       "| Guess the target number based on the clue!         |\n"
+                       "+----------------------------------------------------+\n\n");
+                net_print(client_sock, "Waiting for Surmiser's Hypothesis...\n"); 
+                
+                guess = get_local_int("Surmiser's Hypothesis (1-10): ", 1, 10);
+            } else { 
+                format_scale(scale_buf, 0, 0); net_print(client_sock, scale_buf); 
+                net_print(client_sock, 
+                       "+----------------------------------------------------+\n"
+                       "| [INSTRUCTION]                                      |\n"
+                       "| Guess the target number based on the clue!         |\n"
+                       "+----------------------------------------------------+\n\n");
+                printf("Waiting for Surmiser's Hypothesis...\n"); 
+                
+                guess = net_ask_int(client_sock, "Surmiser's Hypothesis (1-10): ", 1, 10);
+            }
+
+            int diff = abs(target - guess);
+            int pts = (diff == 0) ? 3 : ((diff == 1) ? 2 : ((diff == 2) ? 1 : 0));
+            
+            if (p1_is_psychic) p2_total += pts; else p1_total += pts;
+
+            draw_banners(client_sock, r, host_is_psychic);
+            sprintf(buf, "[ %s <---> %s ]\n", spec.left, spec.right); broadcast(client_sock, buf);
+            sprintf(buf, "Psychic's Clue: %s\n\n", clue); broadcast(client_sock, buf);
+            
+            format_scale(scale_buf, target, guess); broadcast(client_sock, scale_buf); 
+            
+            sprintf(buf, 
+                "\n+----------------------------------------------------+\n"
+                "| [SCORING]                                          |\n"
+                "| Target was %-2d      Surmiser Guessed %-2d             |\n"
+                "| Points earned this round: %-24d |\n"
+                "+----------------------------------------------------+\n\n", target, guess, pts);
+            broadcast(client_sock, buf);
+            
+            if (r < 5) {
+                int p1_is_next_psychic = ((r + 1) % 2 != 0); 
+                int host_is_next_psychic = (p1_is_next_psychic && host_is_p1) || (!p1_is_next_psychic && !host_is_p1);
+
+                char choice[10];
+                if (host_is_next_psychic) {
+                    net_print(client_sock, "\nWaiting for NEXT ROUND'S PSYCHIC to decide...\n");
+                    get_local_str("\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ", choice, 10);
+                } else {
+                    printf("\nWaiting for NEXT ROUND'S PSYCHIC to decide...\n");
+                    net_ask_str(client_sock, "\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ", choice);
+                }
+                
+                if (choice[0] == 'q' || choice[0] == 'Q') {
+                    char confirm[10];
+                    if (host_is_next_psychic) {
+                        printf("Waiting for SURMISER to confirm quit...\n");
+                        net_ask_str(client_sock, "\n[SURMISER] The PSYCHIC wants to quit. Do you agree to end the game? [y/n]: ", confirm);
+                    } else {
+                        net_print(client_sock, "Waiting for SURMISER to confirm quit...\n");
+                        get_local_str("\n[SURMISER] The PSYCHIC wants to quit. Do you agree to end the game? [y/n]: ", confirm, 10);
+                    }
+
+                    if (confirm[0] == 'y' || confirm[0] == 'Y') {
+                        broadcast(client_sock, "\nBoth players agreed to quit. Tallying final scores...\n");
+                        sleep(2);
+                        break; 
+                    } else {
+                        broadcast(client_sock, "\nSurmiser refused to quit! The game continues...\n");
+                        sleep(2);
+                    }
+                } else if (choice[0] == 'n' || choice[0] == 'N') {
+                    curr_category = -1; 
+                }
             }
         }
 
-        Spectrum spec = SPECTRUMS[curr_category];
-        int target = (rand() % 10) + 1;
-        char clue[256];
-        char scale_buf[256];
-
-        broadcast_clear(client_sock);
-        sprintf(buf, "[ %s <---> %s ]\n\n", spec.left, spec.right); broadcast(client_sock, buf);
-
-        if (host_is_psychic) {
-            sprintf(buf, "Target Number: %d\n", target); printf("%s", buf);
-            format_scale(scale_buf, target, 0); printf("%s\n", scale_buf); 
-            printf("The PSYCHIC will give the clue to help SURMISER give a better guess.\n\n");
-            
-            net_print(client_sock, "Waiting for Psychic to see target and formulate clue...\n"); 
-            
-            get_local_str("Psychic's Clue: ", clue, 256);
-        } else {
-            sprintf(buf, "Target Number: %d\n", target); net_print(client_sock, buf);
-            format_scale(scale_buf, target, 0); net_print(client_sock, scale_buf); 
-            net_print(client_sock, "The PSYCHIC will give the clue to help SURMISER give a better guess.\n\n");
-            
-            printf("Waiting for Psychic to see target and formulate clue...\n"); 
-            
-            net_ask_str(client_sock, "Psychic's Clue: ", clue);
-        }
-
-        broadcast_clear(client_sock);
-        sprintf(buf, "[ %s <---> %s ]\n\n", spec.left, spec.right); broadcast(client_sock, buf);
-        sprintf(buf, "Psychic's Clue: %s\n\n", clue); broadcast(client_sock, buf);
-
-        int guess = 0;
-        if (!host_is_psychic) { 
-            format_scale(scale_buf, 0, 0); printf("%s\n", scale_buf); 
-            printf("The SURMISER will now guess the target number.\n\n");
-            net_print(client_sock, "Waiting for Surmiser's Hypothesis...\n"); 
-            
-            guess = get_local_int("Surmiser's Hypothesis (1-10): ", 1, 10);
-        } else { 
-            format_scale(scale_buf, 0, 0); net_print(client_sock, scale_buf); 
-            net_print(client_sock, "The SURMISER will now guess the target number.\n\n");
-            printf("Waiting for Surmiser's Hypothesis...\n"); 
-            
-            guess = net_ask_int(client_sock, "Surmiser's Hypothesis (1-10): ");
-        }
-
-        int diff = abs(target - guess);
-        int pts = (diff == 0) ? 3 : ((diff == 1) ? 2 : ((diff == 2) ? 1 : 0));
+        system("clear"); net_clear(client_sock);
+        int final_avg = (p1_total + p2_total); 
         
-        if (p1_is_psychic) p2_total += pts; else p1_total += pts;
-
-        broadcast_clear(client_sock);
-        sprintf(buf, "[ %s <---> %s ]\n", spec.left, spec.right); broadcast(client_sock, buf);
-        sprintf(buf, "Psychic's Clue: %s\n\n", clue); broadcast(client_sock, buf);
-        
-        format_scale(scale_buf, target, guess); broadcast(client_sock, scale_buf); 
-        
-        sprintf(buf, "\nTarget Number was: %d\n", target); broadcast(client_sock, buf);
-        sprintf(buf, "Surmiser Guessed: %d\n\n", guess); broadcast(client_sock, buf);
-        
-        sprintf(buf, "Surmiser got %d points!\n\n", pts); broadcast(client_sock, buf);
-        
-        sprintf(buf, "PLAYER 1’s Total Points: %d\n", p1_total); broadcast(client_sock, buf);
-        sprintf(buf, "PLAYER 2’s Total Points: %d\n", p2_total); broadcast(client_sock, buf);
-
-        if (r < 5) {
-            char choice[10];
-            if (host_is_psychic) {
-                net_print(client_sock, "\nWaiting for PSYCHIC to decide...\n");
-                get_local_str("\nContinue [y], Change Category [n], or Quit [q]? ", choice, 10);
-            } else {
-                printf("\nWaiting for PSYCHIC to decide...\n");
-                net_ask_str(client_sock, "\nContinue [y], Change Category [n], or Quit [q]? ", choice);
-            }
+        broadcast(client_sock, 
+            "+====================================================+\n"
+            "|               *** FINAL SCORE *** |\n"
+            "+====================================================+\n");
             
-            if (choice[0] == 'q' || choice[0] == 'Q') {
-                break; 
-            } else if (choice[0] == 'n' || choice[0] == 'N') {
-                curr_category = -1; 
-            }
+        sprintf(buf, 
+            "\n  PLAYER 1 (%s) Total: %d\n"
+            "  PLAYER 2 (%s) Total: %d\n"
+            "  --------------------------------\n"
+            "  TEAM COMBINED SCORE: %d\n\n", p1_name, p1_total, p2_name, p2_total, final_avg);
+        broadcast(client_sock, buf);
+
+        if (final_avg >= 10) broadcast(client_sock, ">> VERDICT: You matched each other’s FREQ!\n");
+        else if (final_avg >= 5) broadcast(client_sock, ">> VERDICT: Not quite there yet…\n");
+        else broadcast(client_sock, ">> VERDICT: Oops–you are polar opposites.\n");
+
+        char play_again[10];
+        printf("\n");
+        net_print(client_sock, "\nWaiting for Host to decide on a new game...\n");
+        get_local_str("Do you want to play a new game? [y/n]: ", play_again, 10);
+        
+        if (play_again[0] == 'n' || play_again[0] == 'N') {
+            break; 
         }
     }
-
-    broadcast_clear(client_sock);
-    int final_avg = (p1_total + p2_total); 
-    broadcast(client_sock, "=== FINAL RESULTS ===\n");
-    if (final_avg >= 10) broadcast(client_sock, "- You matched each other’s FREQ!\n");
-    else if (final_avg >= 5) broadcast(client_sock, "- Not quite there yet…\n");
-    else broadcast(client_sock, "- Oops–you are polar opposites.\n");
 
     NetPacket q; q.cmd = 4; send(client_sock, &q, sizeof(NetPacket), 0);
     close(client_sock); close(server_fd);
