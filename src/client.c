@@ -4,25 +4,38 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
-#define PORT 8888 // NEW PORT TO ESCAPE ZOMBIES
-
 typedef struct {
     int cmd; 
     char text[2048];
 } NetPacket;
 
-int main() {
+int main(int argc, char *argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <host_name_or_ip> <port_number>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    char *server_ip = argv[1];
+    int port = atoi(argv[2]);
+
     int sock = 0;
     struct sockaddr_in serv_addr;
 
-    printf("\n*** MATCH MY FREQ (PORT 8888) ***\n");
+    system("clear");
+    printf("\n*** MATCH MY FREQ - CLIENT ***\n\n");
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) exit(EXIT_FAILURE);
-    serv_addr.sin_family = AF_INET; serv_addr.sin_port = htons(PORT);
-    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    serv_addr.sin_family = AF_INET; serv_addr.sin_port = htons(port);
+    
+    if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
+        printf("\nInvalid IP address format.\n");
+        return -1;
+    }
 
+    printf("Attempting to connect to %s on port %d...\n", server_ip, port);
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        printf("Connection Failed. Start the Host first!\n"); return -1;
+        printf("\nConnection Failed. Make sure the Server is running and firewalls are off!\n"); 
+        return -1;
     }
 
     NetPacket pkt;

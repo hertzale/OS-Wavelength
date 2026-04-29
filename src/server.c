@@ -6,8 +6,6 @@
 #include <sys/socket.h>
 #include <time.h>
 
-#define PORT 8888
-
 typedef struct {
     int cmd; 
     char text[2048];
@@ -90,21 +88,27 @@ void get_local_str(const char* prompt, char* out, int max_len) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <port_number>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
+    int port = atoi(argv[1]);
     srand(time(NULL));
     int server_fd, client_sock;
     struct sockaddr_in address; int opt = 1; int addrlen = sizeof(address);
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) exit(EXIT_FAILURE);
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
-    address.sin_family = AF_INET; address.sin_addr.s_addr = INADDR_ANY; address.sin_port = htons(PORT);
+    address.sin_family = AF_INET; address.sin_addr.s_addr = INADDR_ANY; address.sin_port = htons(port);
     bind(server_fd, (struct sockaddr *)&address, sizeof(address));
     listen(server_fd, 1);
 
     system("clear");
-    printf("\n*** MATCH MY FREQ (PORT 8888) ***\n");
-    printf("Waiting for the other terminal to connect...\n");
-    client_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+    printf("\n*** MATCH MY FREQ - SERVER ***\n");
+    printf("Waiting for the Client terminal to connect on port %d...\n", port);
+    client_sock = accept(server_fd, (struct sockaddr )&address, (socklen_t)&addrlen);
 
     char host_name[50], client_name[50], p1_name[50], p2_name[50], buf[1024];
 
@@ -222,7 +226,6 @@ int main() {
         sprintf(buf, "PLAYER 1’s Total Points: %d\n", p1_total); broadcast(client_sock, buf);
         sprintf(buf, "PLAYER 2’s Total Points: %d\n", p2_total); broadcast(client_sock, buf);
 
-        // --- PANEL 10: CONTINUE, CHANGE, OR QUIT ---
         if (r < 5) {
             char choice[10];
             if (host_is_psychic) {
@@ -233,16 +236,14 @@ int main() {
                 net_ask_str(client_sock, "\nContinue [y], Change Category [n], or Quit [q]? ", choice);
             }
             
-            // Handle the new Quit option
             if (choice[0] == 'q' || choice[0] == 'Q') {
-                break; // Break out of the 5-round loop instantly
+                break; 
             } else if (choice[0] == 'n' || choice[0] == 'N') {
-                curr_category = -1; // Reset category
+                curr_category = -1; 
             }
         }
     }
 
-    // --- PANEL 9: FINAL RESULTS ---
     broadcast_clear(client_sock);
     int final_avg = (p1_total + p2_total); 
     broadcast(client_sock, "=== FINAL RESULTS ===\n");
