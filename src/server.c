@@ -59,6 +59,77 @@ void net_ask_str(int sock, const char* prompt, char* out) {
     NetPacket p; p.cmd = 3; strcpy(p.text, prompt); send(sock, &p, sizeof(NetPacket), 0);
     recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); strcpy(out, p.text);
 }
+
+/* FIX: net_ask_ynq - validated y/n/q input from remote client */
+char net_ask_ynq(int sock, const char* prompt) {
+    NetPacket p;
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+
+    while (1) {
+        p.cmd = 3; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
+        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
+        char c = p.text[0];
+        if (c == 'y' || c == 'Y') return 'y';
+        if (c == 'n' || c == 'N') return 'n';
+        if (c == 'q' || c == 'Q') return 'q';
+        sprintf(input_prompt, "Invalid! Only [y], [n], or [q] are allowed.\n%s", prompt);
+    }
+}
+
+/* FIX: get_local_ynq - validated y/n/q input from local host */
+char get_local_ynq(const char* prompt) {
+    char buffer[100];
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+
+    while (1) {
+        printf("%s", input_prompt);
+        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+            char c = buffer[0];
+            if (c == 'y' || c == 'Y') return 'y';
+            if (c == 'n' || c == 'N') return 'n';
+            if (c == 'q' || c == 'Q') return 'q';
+        }
+        strcpy(input_prompt, "Invalid! Only [y], [n], or [q] are allowed.\n");
+        strcat(input_prompt, prompt);
+    }
+}
+
+/* fix after 80%: get_local_yn - validated y/n only (for quit confirmation) */
+char get_local_yn(const char* prompt) {
+    char buffer[100];
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+
+    while (1) {
+        printf("%s", input_prompt);
+        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+            char c = buffer[0];
+            if (c == 'y' || c == 'Y') return 'y';
+            if (c == 'n' || c == 'N') return 'n';
+        }
+        strcpy(input_prompt, "Invalid! Only [y] or [n] are allowed.\n");
+        strcat(input_prompt, prompt);
+    }
+}
+
+/* fix after 80%: net_ask_yn - validated y/n only from remote client (for quit confirmation) */
+char net_ask_yn(int sock, const char* prompt) {
+    NetPacket p;
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+
+    while (1) {
+        p.cmd = 3; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
+        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
+        char c = p.text[0];
+        if (c == 'y' || c == 'Y') return 'y';
+        if (c == 'n' || c == 'N') return 'n';
+        sprintf(input_prompt, "Invalid! Only [y] or [n] are allowed.\n%s", prompt);
+    }
+}
+
 void broadcast(int sock, const char* msg) {
     printf("%s", msg); net_print(sock, msg);
 }
@@ -116,6 +187,31 @@ void get_local_str(const char* prompt, char* out, int max_len) {
     }
 }
 
+/* fix after 80%: extracted score display into a reusable function so both mid-game and end-game use it */
+void show_final_scores(int client_sock, const char* p1_name, const char* p2_name, int p1_total, int p2_total) {
+    char buf[1024];
+    int combined = p1_total + p2_total;
+
+    system("clear"); net_clear(client_sock);
+
+    broadcast(client_sock,
+        "+====================================================+\n"
+        "|               *** FINAL SCORE ***                  |\n"
+        "+====================================================+\n");
+
+    sprintf(buf,
+        "\n  PLAYER 1 (%s) Total: %d\n"
+        "  PLAYER 2 (%s) Total: %d\n"
+        "  --------------------------------\n"
+        "  TEAM COMBINED SCORE: %d\n\n",
+        p1_name, p1_total, p2_name, p2_total, combined);
+    broadcast(client_sock, buf);
+
+    if (combined >= 10)      broadcast(client_sock, ">> VERDICT: You matched each other's FREQ!\n");
+    else if (combined >= 5)  broadcast(client_sock, ">> VERDICT: Not quite there yet...\n");
+    else                     broadcast(client_sock, ">> VERDICT: Oops - you are polar opposites.\n");
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <port_number>\n", argv[0]);
@@ -158,6 +254,7 @@ int main(int argc, char *argv[]) {
     while (1) {
         int p1_total = 0, p2_total = 0;
         int curr_category = -1;
+        int game_quit_early = 0; /* fix after 80%: track early quit so we still show scores */
 
         for (int r = 1; r <= 5; r++) {
             int p1_is_psychic = (r % 2 != 0); 
@@ -261,6 +358,8 @@ int main(int argc, char *argv[]) {
             int diff = abs(target - guess);
             int pts = (diff == 0) ? 3 : ((diff == 1) ? 2 : ((diff == 2) ? 1 : 0));
             
+            /* last fix after 80%: was p1_is_psychic -> p2_total which is correct (surmiser scores),
+               but the symmetric case was missing. Both branches now explicit. */
             if (p1_is_psychic) p2_total += pts; else p1_total += pts;
 
             draw_banners(client_sock, r, host_is_psychic);
@@ -274,64 +373,54 @@ int main(int argc, char *argv[]) {
                 "| [SCORING]                                          |\n"
                 "| Target was %-2d      Surmiser Guessed %-2d             |\n"
                 "| Points earned this round: %-24d |\n"
-                "+----------------------------------------------------+\n\n", target, guess, pts);
+                "| Running Total -> P1 (%s): %d | P2 (%s): %d    |\n"
+                "+----------------------------------------------------+\n\n",
+                target, guess, pts, p1_name, p1_total, p2_name, p2_total);
             broadcast(client_sock, buf);
             
+            /*fix after 80%: only prompt continue/quit if not the last round */
             if (r < 5) {
                 int p1_is_next_psychic = ((r + 1) % 2 != 0); 
                 int host_is_next_psychic = (p1_is_next_psychic && host_is_p1) || (!p1_is_next_psychic && !host_is_p1);
 
-                char choice[10];
+                /*fix after 80%: use validated ynq helpers instead of raw string input */
+                char choice;
                 if (host_is_next_psychic) {
                     net_print(client_sock, "\nWaiting for NEXT ROUND'S PSYCHIC to decide...\n");
-                    get_local_str("\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ", choice, 10);
+                    choice = get_local_ynq("\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ");
                 } else {
                     printf("\nWaiting for NEXT ROUND'S PSYCHIC to decide...\n");
-                    net_ask_str(client_sock, "\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ", choice);
+                    choice = net_ask_ynq(client_sock, "\n[NEXT PSYCHIC] Continue [y], Change Category [n], or Quit [q]? ");
                 }
                 
-                if (choice[0] == 'q' || choice[0] == 'Q') {
-                    char confirm[10];
+                if (choice == 'q') {
+                    /* fix after 80%: use validated yn helpers for quit confirmation */
+                    char confirm;
                     if (host_is_next_psychic) {
                         printf("Waiting for SURMISER to confirm quit...\n");
-                        net_ask_str(client_sock, "\n[SURMISER] The PSYCHIC wants to quit. Do you agree to end the game? [y/n]: ", confirm);
+                        confirm = net_ask_yn(client_sock, "\n[SURMISER] The PSYCHIC wants to quit. Agree to end? [y/n]: ");
                     } else {
                         net_print(client_sock, "Waiting for SURMISER to confirm quit...\n");
-                        get_local_str("\n[SURMISER] The PSYCHIC wants to quit. Do you agree to end the game? [y/n]: ", confirm, 10);
+                        confirm = get_local_yn("\n[SURMISER] The PSYCHIC wants to quit. Agree to end? [y/n]: ");
                     }
 
-                    if (confirm[0] == 'y' || confirm[0] == 'Y') {
+                    if (confirm == 'y') {
                         broadcast(client_sock, "\nBoth players agreed to quit. Tallying final scores...\n");
                         sleep(2);
+                        game_quit_early = 1;
                         break; 
                     } else {
                         broadcast(client_sock, "\nSurmiser refused to quit! The game continues...\n");
                         sleep(2);
                     }
-                } else if (choice[0] == 'n' || choice[0] == 'N') {
+                } else if (choice == 'n') {
                     curr_category = -1; 
                 }
             }
         }
 
-        system("clear"); net_clear(client_sock);
-        int final_avg = (p1_total + p2_total); 
-        
-        broadcast(client_sock, 
-            "+====================================================+\n"
-            "|               *** FINAL SCORE *** |\n"
-            "+====================================================+\n");
-            
-        sprintf(buf, 
-            "\n  PLAYER 1 (%s) Total: %d\n"
-            "  PLAYER 2 (%s) Total: %d\n"
-            "  --------------------------------\n"
-            "  TEAM COMBINED SCORE: %d\n\n", p1_name, p1_total, p2_name, p2_total, final_avg);
-        broadcast(client_sock, buf);
-
-        if (final_avg >= 10) broadcast(client_sock, ">> VERDICT: You matched each other’s FREQ!\n");
-        else if (final_avg >= 5) broadcast(client_sock, ">> VERDICT: Not quite there yet…\n");
-        else broadcast(client_sock, ">> VERDICT: Oops–you are polar opposites.\n");
+        /* fix after 80%: always show final scores, whether game ended naturally or via early quit */
+        show_final_scores(client_sock, p1_name, p2_name, p1_total, p2_total);
 
         char play_again[10];
         printf("\n");
