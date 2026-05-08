@@ -28,7 +28,7 @@ Spectrum SPECTRUMS[] = {
     {"Cancellable", "Unproblematic"}, {"Side Eye", "Full Confrontation"},
     {"Bed Rotting", "Main Character Grind"}, {"Dramatic", "Nonchalant"},
     {"Strict Parent", "Lenient Parent"}, {"Galing Mansyon", "Galing Kalye"},
-    {"Main Character", "NPC Energy"}, {"Chronically Online", "Touch Grass"},
+    {"Main Character", "NPC Energy"}, {"Chronically Online", "Touching Grass"},
     {"Soft Launch", "Hard Launch"}, {"Overthink Malala", "Walang Pake"},
     {"Clingy", "Emotionally Unavailable"}, {"Hopeless Romantic", "Hopeful Romantic"},
     {"Minimal Effort", "Overachiever Tryhard"}
@@ -60,7 +60,6 @@ void net_ask_str(int sock, const char* prompt, char* out) {
     recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); strcpy(out, p.text);
 }
 
-/* FIX: net_ask_ynq - validated y/n/q input from remote client */
 char net_ask_ynq(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
@@ -77,7 +76,6 @@ char net_ask_ynq(int sock, const char* prompt) {
     }
 }
 
-/* FIX: get_local_ynq - validated y/n/q input from local host */
 char get_local_ynq(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
@@ -96,7 +94,6 @@ char get_local_ynq(const char* prompt) {
     }
 }
 
-/* fix after 80%: get_local_yn - validated y/n only (for quit confirmation) */
 char get_local_yn(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
@@ -114,7 +111,6 @@ char get_local_yn(const char* prompt) {
     }
 }
 
-/* fix after 80%: net_ask_yn - validated y/n only from remote client (for quit confirmation) */
 char net_ask_yn(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
@@ -137,19 +133,28 @@ void broadcast(int sock, const char* msg) {
 void draw_banners(int client_sock, int r, int host_is_psychic) {
     system("clear"); net_clear(client_sock);
     
-    char host_buf[512], client_buf[512];
+    // Using True Color RGB sequence for #ff69b4 (255, 105, 180)
+    const char* pink_banner = 
+        "\033[38;2;255;105;180m"
+        "█▀▄▀█ ▄▀█ ▀█▀ █▀▀ █░█   █▀▄▀█ █▄█   █▀▀ █▀█ █▀▀ █▀█\n"
+        "█░▀░█ █▀█ ░█░ █▄▄ █▀█   █░▀░█ ░█░   █▀░ █▀▄ ██▄ ▀▀█\n"
+        "\033[0m";
+    
+    char host_buf[2048], client_buf[2048];
     sprintf(host_buf, 
-        "======================================================\n"
-        "       MATCH MY FREQ  |  ROUND %d  |  YOU ARE: %s     \n"
-        "======================================================\n\n", 
-        r, host_is_psychic ? "PSYCHIC" : "SURMISER");
+        "%s"
+        "=======================================================\n"
+        "              ROUND %d  |  YOU ARE: %s                 \n"
+        "=======================================================\n\n", 
+        pink_banner, r, host_is_psychic ? "PSYCHIC" : "SURMISER");
     printf("%s", host_buf);
 
     sprintf(client_buf, 
-        "======================================================\n"
-        "       MATCH MY FREQ  |  ROUND %d  |  YOU ARE: %s     \n"
-        "======================================================\n\n", 
-        r, !host_is_psychic ? "PSYCHIC" : "SURMISER");
+        "%s"
+        "=======================================================\n"
+        "              ROUND %d  |  YOU ARE: %s                 \n"
+        "=======================================================\n\n", 
+        pink_banner, r, !host_is_psychic ? "PSYCHIC" : "SURMISER");
     net_print(client_sock, client_buf);
 }
 
@@ -187,7 +192,6 @@ void get_local_str(const char* prompt, char* out, int max_len) {
     }
 }
 
-/* fix after 80%: extracted score display into a reusable function so both mid-game and end-game use it */
 void show_final_scores(int client_sock, const char* p1_name, const char* p2_name, int p1_total, int p2_total) {
     char buf[1024];
     int combined = p1_total + p2_total;
@@ -230,7 +234,11 @@ int main(int argc, char *argv[]) {
     listen(server_fd, 1);
 
     system("clear");
-    printf("\n*** MATCH MY FREQ - SERVER ***\n");
+
+    printf("\033[38;2;255;105;180m"
+           "█▀▄▀█ ▄▀█ ▀█▀ █▀▀ █░█   █▀▄▀█ █▄█   █▀▀ █▀█ █▀▀ █▀█\n"
+           "█░▀░█ █▀█ ░█░ █▄▄ █▀█   █░▀░█ ░█░   █▀░ █▀▄ ██▄ ▀▀█\n"
+           "\033[0m");
     printf("Waiting for the Client terminal to connect on port %d...\n", port);
     client_sock = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
 
@@ -254,7 +262,7 @@ int main(int argc, char *argv[]) {
     while (1) {
         int p1_total = 0, p2_total = 0;
         int curr_category = -1;
-        int game_quit_early = 0; /* fix after 80%: track early quit so we still show scores */
+        int game_quit_early = 0;
 
         for (int r = 1; r <= 5; r++) {
             int p1_is_psychic = (r % 2 != 0); 
@@ -358,8 +366,6 @@ int main(int argc, char *argv[]) {
             int diff = abs(target - guess);
             int pts = (diff == 0) ? 3 : ((diff == 1) ? 2 : ((diff == 2) ? 1 : 0));
             
-            /* last fix after 80%: was p1_is_psychic -> p2_total which is correct (surmiser scores),
-               but the symmetric case was missing. Both branches now explicit. */
             if (p1_is_psychic) p2_total += pts; else p1_total += pts;
 
             draw_banners(client_sock, r, host_is_psychic);
@@ -371,19 +377,17 @@ int main(int argc, char *argv[]) {
             sprintf(buf, 
                 "\n+----------------------------------------------------+\n"
                 "| [SCORING]                                          |\n"
-                "| Target was %-2d      Surmiser Guessed %-2d             |\n"
+                "| Target was %-2d       Surmiser Guessed %-2d             |\n"
                 "| Points earned this round: %-24d |\n"
                 "| Running Total -> P1 (%s): %d | P2 (%s): %d    |\n"
                 "+----------------------------------------------------+\n\n",
                 target, guess, pts, p1_name, p1_total, p2_name, p2_total);
             broadcast(client_sock, buf);
             
-            /*fix after 80%: only prompt continue/quit if not the last round */
             if (r < 5) {
                 int p1_is_next_psychic = ((r + 1) % 2 != 0); 
                 int host_is_next_psychic = (p1_is_next_psychic && host_is_p1) || (!p1_is_next_psychic && !host_is_p1);
 
-                /*fix after 80%: use validated ynq helpers instead of raw string input */
                 char choice;
                 if (host_is_next_psychic) {
                     net_print(client_sock, "\nWaiting for NEXT ROUND'S PSYCHIC to decide...\n");
@@ -394,7 +398,6 @@ int main(int argc, char *argv[]) {
                 }
                 
                 if (choice == 'q') {
-                    /* fix after 80%: use validated yn helpers for quit confirmation */
                     char confirm;
                     if (host_is_next_psychic) {
                         printf("Waiting for SURMISER to confirm quit...\n");
@@ -419,7 +422,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        /* fix after 80%: always show final scores, whether game ended naturally or via early quit */
         show_final_scores(client_sock, p1_name, p2_name, p1_total, p2_total);
 
         char play_again[10];
