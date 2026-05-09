@@ -23,22 +23,25 @@ int main(int argc, char *argv[]) {
 
     system("clear");
     printf("\n*** MATCH MY FREQ - CLIENT ***\n\n");
-
+    // Create a TCP socket using IPv4
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) exit(EXIT_FAILURE);
+    // Configure server address structure and convert port to network byte order
     serv_addr.sin_family = AF_INET; serv_addr.sin_port = htons(port);
-    
+    // Convert IPv4 string address into binary network format
     if (inet_pton(AF_INET, server_ip, &serv_addr.sin_addr) <= 0) {
         printf("\nInvalid IP address format.\n");
         return -1;
     }
 
     printf("Attempting to connect to %s on port %d...\n", server_ip, port);
+    // Connect client socket to the remote server
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         printf("\nConnection Failed. Make sure the Server is running and firewalls are off!\n"); 
         return -1;
     }
 
     NetPacket pkt;
+    // Receive packet data from the server through TCP socket
     while (recv(sock, &pkt, sizeof(NetPacket), MSG_WAITALL) > 0) {
         if (pkt.cmd == 0) {
             printf("%s", pkt.text); fflush(stdout);
@@ -51,9 +54,9 @@ int main(int argc, char *argv[]) {
             while (1) {
                 printf("%s", pkt.text);
                 if (fgets(input, sizeof(input), stdin) != NULL) {
-                    // Removed the rigid 1-10 check! The server will now handle all validation.
                     if (sscanf(input, "%d", &choice) == 1) { 
                         NetPacket resp; sprintf(resp.text, "%d", choice);
+                        // Send response packet from client to server
                         send(sock, &resp, sizeof(NetPacket), 0); break;
                     }
                 }
@@ -76,7 +79,7 @@ int main(int argc, char *argv[]) {
         } 
         else if (pkt.cmd == 4) break;
     }
-
+    // Close the client socket connection
     close(sock);
     return 0;
 }
