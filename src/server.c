@@ -29,9 +29,10 @@ Spectrum SPECTRUMS[] = {
     {"Bed Rotting", "Main Character Grind"}, {"Dramatic", "Nonchalant"},
     {"Strict Parent", "Lenient Parent"}, {"Galing Mansyon", "Galing Kalye"},
     {"Main Character", "NPC Energy"}, {"Chronically Online", "Touching Grass"},
-    {"Soft Launch", "Hard Launch"}, {"Overthink Malala", "Walang Pake"},
+    {"Soft Launch", "Hard Launch"}, {"Overthink Malala", "Ded is ma"},
     {"Clingy", "Emotionally Unavailable"}, {"Hopeless Romantic", "Hopeful Romantic"},
-    {"Minimal Effort", "Overachiever Tryhard"}
+    {"Minimal Effort", "Overachiever Tryhard"},
+    {"Performative", "Authentic"}          /* NEW CATEGORY */
 };
 int NUM_SPECTRUMS = sizeof(SPECTRUMS) / sizeof(Spectrum);
 
@@ -51,7 +52,6 @@ int net_ask_int(int sock, const char* prompt, int min, int max) {
         recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); 
         int val = atoi(p.text);
         if (val >= min && val <= max) return val;
-        
         sprintf(input_prompt, "Invalid! Enter a number between %d and %d.\n%s", min, max, prompt);
     }
 }
@@ -64,7 +64,6 @@ char net_ask_ynq(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
     strcpy(input_prompt, prompt);
-
     while (1) {
         p.cmd = 3; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
         recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
@@ -80,7 +79,6 @@ char get_local_ynq(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
     strcpy(input_prompt, prompt);
-
     while (1) {
         printf("%s", input_prompt);
         if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
@@ -98,7 +96,6 @@ char get_local_yn(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
     strcpy(input_prompt, prompt);
-
     while (1) {
         printf("%s", input_prompt);
         if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
@@ -115,7 +112,6 @@ char net_ask_yn(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
     strcpy(input_prompt, prompt);
-
     while (1) {
         p.cmd = 3; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
         recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
@@ -126,6 +122,37 @@ char net_ask_yn(int sock, const char* prompt) {
     }
 }
 
+/* NEW: validated [y/r] pick asking host/client whether to pick or randomize */
+char get_local_yr(const char* prompt) {
+    char buffer[100];
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+    while (1) {
+        printf("%s", input_prompt);
+        if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+            char c = buffer[0];
+            if (c == 'y' || c == 'Y') return 'y';
+            if (c == 'r' || c == 'R') return 'r';
+        }
+        strcpy(input_prompt, "Invalid! Only [y] to pick or [r] to randomize.\n");
+        strcat(input_prompt, prompt);
+    }
+}
+
+char net_ask_yr(int sock, const char* prompt) {
+    NetPacket p;
+    char input_prompt[2048];
+    strcpy(input_prompt, prompt);
+    while (1) {
+        p.cmd = 3; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
+        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
+        char c = p.text[0];
+        if (c == 'y' || c == 'Y') return 'y';
+        if (c == 'r' || c == 'R') return 'r';
+        sprintf(input_prompt, "Invalid! Only [y] to pick or [r] to randomize.\n%s", prompt);
+    }
+}
+
 void broadcast(int sock, const char* msg) {
     printf("%s", msg); net_print(sock, msg);
 }
@@ -133,7 +160,6 @@ void broadcast(int sock, const char* msg) {
 void draw_banners(int client_sock, int r, int host_is_psychic) {
     system("clear"); net_clear(client_sock);
     
-    // Using True Color RGB sequence for #ff69b4 (255, 105, 180)
     const char* pink_banner = 
         "\033[38;2;255;105;180m"
         "█▀▄▀█ ▄▀█ ▀█▀ █▀▀ █░█   █▀▄▀█ █▄█   █▀▀ █▀█ █▀▀ █▀█\n"
@@ -181,6 +207,7 @@ int get_local_int(const char* prompt, int min, int max) {
         printf("Invalid input. Enter a number between %d and %d.\n", min, max);
     }
 }
+
 void get_local_str(const char* prompt, char* out, int max_len) {
     while (1) {
         printf("%s", prompt);
@@ -214,6 +241,57 @@ void show_final_scores(int client_sock, const char* p1_name, const char* p2_name
     if (combined >= 10)      broadcast(client_sock, ">> VERDICT: You matched each other's FREQ!\n");
     else if (combined >= 5)  broadcast(client_sock, ">> VERDICT: Not quite there yet...\n");
     else                     broadcast(client_sock, ">> VERDICT: Oops - you are polar opposites.\n");
+}
+
+/*
+ * pick_category()
+ * --------------
+ * Called whenever curr_category needs to be set (first round, or after 'n' change).
+ * The PSYCHIC is asked whether they want to pick manually or randomize.
+ * If random, a category is chosen for both players and announced.
+ * Returns the 0-based index of the chosen category.
+ */
+int pick_category(int client_sock, int host_is_psychic, char* buf) {
+    /* Show the list to both terminals */
+    for (int i = 0; i < NUM_SPECTRUMS; i++) {
+        sprintf(buf, "[%2d] %s - %s\n", i + 1, SPECTRUMS[i].left, SPECTRUMS[i].right);
+        broadcast(client_sock, buf);
+    }
+
+    broadcast(client_sock,
+        "\n+----------------------------------------------------+\n"
+        "| PSYCHIC: Pick a number [y] or Randomize [r]?       |\n"
+        "+----------------------------------------------------+\n");
+
+    char mode;
+    if (host_is_psychic) {
+        net_print(client_sock, "\nWaiting for PSYCHIC to decide...\n");
+        mode = get_local_yr("Pick [y] or Randomize [r]? ");
+    } else {
+        printf("\nWaiting for PSYCHIC to decide...\n");
+        mode = net_ask_yr(client_sock, "Pick [y] or Randomize [r]? ");
+    }
+
+    int chosen;
+    if (mode == 'r') {
+        /* Random pick — decided server-side so both see the same result */
+        chosen = rand() % NUM_SPECTRUMS;
+        sprintf(buf, "\n>> Random category selected: [%d] %s - %s\n\n",
+                chosen + 1, SPECTRUMS[chosen].left, SPECTRUMS[chosen].right);
+        broadcast(client_sock, buf);
+        sleep(2);
+    } else {
+        /* Manual pick */
+        if (host_is_psychic) {
+            net_print(client_sock, "\nWaiting for PSYCHIC to pick...\n");
+            chosen = get_local_int("\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
+        } else {
+            printf("\nWaiting for PSYCHIC to pick...\n");
+            chosen = net_ask_int(client_sock, "\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
+        }
+    }
+
+    return chosen;
 }
 
 int main(int argc, char *argv[]) {
@@ -289,19 +367,9 @@ int main(int argc, char *argv[]) {
                 "+----------------------------------------------------+\n\n");
             sleep(2);
 
+            /* CHANGED: category selection now goes through pick_category() */
             if (curr_category == -1) {
-                for (int i = 0; i < NUM_SPECTRUMS; i++) {
-                    sprintf(buf, "[%2d] %s - %s\n", i+1, SPECTRUMS[i].left, SPECTRUMS[i].right);
-                    broadcast(client_sock, buf);
-                }
-                
-                if (host_is_psychic) {
-                    net_print(client_sock, "\nWaiting for PSYCHIC to pick...\n"); 
-                    curr_category = get_local_int("\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
-                } else {
-                    printf("\nWaiting for PSYCHIC to pick...\n"); 
-                    curr_category = net_ask_int(client_sock, "\nCategory Number: ", 1, NUM_SPECTRUMS) - 1;
-                }
+                curr_category = pick_category(client_sock, host_is_psychic, buf);
             }
 
             Spectrum spec = SPECTRUMS[curr_category];
