@@ -17,7 +17,7 @@ typedef struct {
     char left[50];
     char right[50];
 } Spectrum;
-
+//categories
 Spectrum SPECTRUMS[] = {
     {"Underrated Skill", "Overrated Skill"}, {"Terrible First Date Spot", "Perfect First Date Spot"},
     {"Awkward Conversation Topic", "Engaging Conversation Topic"}, {"Worst Reason to Break Up", "Valid Reason to Break Up"},
@@ -36,31 +36,77 @@ Spectrum SPECTRUMS[] = {
 };
 
 int NUM_SPECTRUMS = sizeof(SPECTRUMS) / sizeof(Spectrum);
-
+// Sends a text message packet to the client
 void net_print(int sock, const char* msg) {
-    NetPacket p; p.cmd = 0; strcpy(p.text, msg); send(sock, &p, sizeof(NetPacket), 0);
+    NetPacket p;
+
+    p.cmd = 0; 
+
+    strcpy(p.text, msg);
+
+    // send() transmits the packet through the TCP socket
+    send(sock, &p, sizeof(NetPacket), 0);
 }
+
+
+// Sends a command packet that clears the client terminal screen
 void net_clear(int sock) {
-    NetPacket p; p.cmd = 1; send(sock, &p, sizeof(NetPacket), 0);
+    NetPacket p;
+
+    p.cmd = 1; // Command type for clear screen
+
+    send(sock, &p, sizeof(NetPacket), 0);
 }
+
+
+// Sends an integer prompt to the client and waits for response
 int net_ask_int(int sock, const char* prompt, int min, int max) {
-    NetPacket p; 
+
+    NetPacket p;
     char input_prompt[2048];
     strcpy(input_prompt, prompt);
-    
+
+    // Repeats until a valid integer is received
     while(1) {
-        p.cmd = 2; strcpy(p.text, input_prompt); send(sock, &p, sizeof(NetPacket), 0);
-        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); 
+
+        p.cmd = 2; // Command type for integer input
+
+        strcpy(p.text, input_prompt);
+
+        // send() sends the prompt packet to the client
+        send(sock, &p, sizeof(NetPacket), 0);
+
+        /*
+        recv() waits and receives the client's response packet
+        MSG_WAITALL ensures the full packet is received
+        */
+        recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
+        // Converts received string into integer
         int val = atoi(p.text);
-        if (val >= min && val <= max) return val;
-        sprintf(input_prompt, "Invalid! Enter a number between %d and %d.\n%s", min, max, prompt);
+        // Checks if input is within allowed range
+        if (val >= min && val <= max)
+            return val;
+        // Updates prompt if input is invalid
+        sprintf(input_prompt,
+                "Invalid! Enter a number between %d and %d.\n%s",
+                min, max, prompt);
     }
 }
-void net_ask_str(int sock, const char* prompt, char* out) {
-    NetPacket p; p.cmd = 3; strcpy(p.text, prompt); send(sock, &p, sizeof(NetPacket), 0);
-    recv(sock, &p, sizeof(NetPacket), MSG_WAITALL); strcpy(out, p.text);
-}
 
+
+// Sends a string prompt to the client and receives text input
+void net_ask_str(int sock, const char* prompt, char* out) {
+    NetPacket p;
+    p.cmd = 3;
+    strcpy(p.text, prompt);
+    // Sends prompt packet to the client
+    send(sock, &p, sizeof(NetPacket), 0);
+    // Receives response packet from the client
+    recv(sock, &p, sizeof(NetPacket), MSG_WAITALL);
+    // Stores received text into output variable
+   strcpy(out, p.text);
+}
+//asks player for [y/n] input, keeps asking until valid response is received
 char net_ask_ynq(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
@@ -75,7 +121,7 @@ char net_ask_ynq(int sock, const char* prompt) {
         sprintf(input_prompt, "Invalid! Only [y], [n], or [q] are allowed.\n%s", prompt);
     }
 }
-
+//asks player for [y/n] input, keeps asking until valid response is received
 char get_local_ynq(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
@@ -92,7 +138,7 @@ char get_local_ynq(const char* prompt) {
         strcat(input_prompt, prompt);
     }
 }
-
+//asks player for [y/n] input, keeps asking until valid response is received
 char get_local_yn(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
@@ -108,7 +154,7 @@ char get_local_yn(const char* prompt) {
         strcat(input_prompt, prompt);
     }
 }
-
+//asks player for [y/n] input, keeps asking until valid response is received
 char net_ask_yn(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
@@ -123,7 +169,7 @@ char net_ask_yn(int sock, const char* prompt) {
     }
 }
 
-/* NEW: validated [y/r] pick asking host/client whether to pick or randomize */
+/*validated [y/r] pick asking host/client whether to pick or randomize category */
 char get_local_yr(const char* prompt) {
     char buffer[100];
     char input_prompt[2048];
@@ -139,7 +185,7 @@ char get_local_yr(const char* prompt) {
         strcat(input_prompt, prompt);
     }
 }
-
+        //asks player for [y/r] input, keeps asking until valid response is received
 char net_ask_yr(int sock, const char* prompt) {
     NetPacket p;
     char input_prompt[2048];
@@ -184,7 +230,7 @@ void draw_banners(int client_sock, int r, int host_is_psychic) {
         pink_banner, r, !host_is_psychic ? "PSYCHIC" : "SURMISER");
     net_print(client_sock, client_buf);
 }
-
+        //formats the scale string with target and guess indicators
 void format_scale(char* buffer, int target, int guess) {
     strcpy(buffer, "");
     for (int i = 1; i <= 10; i++) {
@@ -196,8 +242,7 @@ void format_scale(char* buffer, int target, int guess) {
         strcat(buffer, temp);
     }
     strcat(buffer, "\n");
-}
-
+} //calculates points based on guess accuracy
 int get_local_int(const char* prompt, int min, int max) {
     int choice; char buffer[100];
     while (1) {
@@ -208,7 +253,7 @@ int get_local_int(const char* prompt, int min, int max) {
         printf("Invalid input. Enter a number between %d and %d.\n", min, max);
     }
 }
-
+//calculates points based on guess accuracy
 void get_local_str(const char* prompt, char* out, int max_len) {
     while (1) {
         printf("%s", prompt);
@@ -219,7 +264,7 @@ void get_local_str(const char* prompt, char* out, int max_len) {
         printf("Input cannot be empty.\n");
     }
 }
-
+//calculates points based on guess accuracy, shows the final scores and verdict at the end of the game
 void show_final_scores(int client_sock, const char* p1_name, const char* p2_name, int p1_total, int p2_total) {
     char buf[1024];
     int combined = p1_total + p2_total;
@@ -492,7 +537,7 @@ int main(int argc, char *argv[]) {
         }
 
         show_final_scores(client_sock, p1_name, p2_name, p1_total, p2_total);
-
+        
         char play_again[10];
         printf("\n");
         net_print(client_sock, "\nWaiting for Host to decide on a new game...\n");
@@ -502,7 +547,7 @@ int main(int argc, char *argv[]) {
             break; 
         }
     }
-
+  
     NetPacket q; q.cmd = 4; send(client_sock, &q, sizeof(NetPacket), 0);
     close(client_sock); close(server_fd);
     return 0;
