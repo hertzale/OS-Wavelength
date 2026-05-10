@@ -21,19 +21,20 @@ typedef struct {
 Spectrum SPECTRUMS[] = {
     {"Underrated Skill", "Overrated Skill"}, {"Terrible First Date Spot", "Perfect First Date Spot"},
     {"Awkward Conversation Topic", "Engaging Conversation Topic"}, {"Worst Reason to Break Up", "Valid Reason to Break Up"},
-    {"Green Flag", "Red Flag"}, {"Conyo Energy", "Kanal Humor"},
-    {"Princess Treatment", "Bare Minimum"}, {"Micro-cheating", "Totally Harmless"},
-    {"Tell Your Strict Mom", "Tell Your Chill Dad"}, {"Worst Chore", "Most Satisfying Chore"},
-    {"Weird Thing to Own", "Normal Thing to Own"}, {"Confrontational", "Avoidant"},
-    {"Cancellable", "Unproblematic"}, {"Side Eye", "Full Confrontation"},
-    {"Bed Rotting", "Main Character Grind"}, {"Dramatic", "Nonchalant"},
-    {"Strict Parent", "Lenient Parent"}, {"Galing Mansyon", "Galing Kalye"},
-    {"Main Character", "NPC Energy"}, {"Chronically Online", "Touching Grass"},
-    {"Soft Launch", "Hard Launch"}, {"Overthink Malala", "Ded is ma"},
-    {"Clingy", "Emotionally Unavailable"}, {"Hopeless Romantic", "Hopeful Romantic"},
-    {"Minimal Effort", "Overachiever Tryhard"},
-    {"Performative", "Authentic"}          /* NEW CATEGORY */
+    {"Green Flag", "Red Flag"}, {"Princess Treatment", "Bare Minimum"},
+    {"Micro-cheating", "Totally Harmless"}, {"Tell Your Strict Mom", "Tell Your Chill Dad"},
+    {"Worst Chore", "Most Satisfying Chore"}, {"Weird Thing to Own", "Normal Thing to Own"},
+    {"Confrontational", "Avoidant"}, {"Cancellable", "Unproblematic"},
+    {"Side Eye", "Full Confrontation"}, {"Petty", "Justified"},
+    {"Dramatic", "Nonchalant"}, {"Strict Parent", "Lenient Parent"},
+    {"Performative", "Authentic"}, {"Chronically Online", "Touching Grass"},
+    {"Soft Launch", "Hard Launch"}, {"Clingy", "Emotionally Unavailable"},
+    {"Hopeless Romantic", "Hopeful Romantic"}, {"Minimal Effort", "Overachiever Tryhard"},
+
+    {"Conyo Energy", "Kanal Humor"}, {"Galing Mansyon", "Galing Kalye"},
+    {"Overthink Malala", "Ded is ma"}
 };
+
 int NUM_SPECTRUMS = sizeof(SPECTRUMS) / sizeof(Spectrum);
 
 void net_print(int sock, const char* msg) {
