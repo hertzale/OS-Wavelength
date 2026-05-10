@@ -2,7 +2,6 @@
 
 void clear() { printf("\e[1;1H\e[2J"); }
 
-// FIX #3/#5: Same reliable flush helper as server.
 void flush_stdin() {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
@@ -67,7 +66,7 @@ int main() {
             }
             printf("\n\nSelection: ");
             scanf("%d", &packet.spectrum_idx);
-            flush_stdin(); // FIX #5
+            flush_stdin(); 
         }
 
         clear();
@@ -78,7 +77,7 @@ int main() {
             printf("\033[94mSYSTEM TARGET: %d\033[0m\n", packet.target);
             print_scale(packet.target, 0);
             printf("\nEnter your Clue: ");
-            flush_stdin(); // FIX #5: replaces bare getchar() before fgets
+            flush_stdin(); 
             fgets(packet.clue, 100, stdin);
             packet.clue[strcspn(packet.clue, "\n")] = 0;
 
@@ -87,7 +86,7 @@ int main() {
             printf("\nWaiting for Player 1's hypothesis...\n");
             recv(sock, &packet.guess, sizeof(int), 0);
 
-            // FIX #2: Show result on client side too
+
             int pts = score_round(packet.target, packet.guess);
             printf("P1 guessed %d | Target was %d | P1 +%d pts\n", packet.guess, packet.target, pts);
 
@@ -96,22 +95,20 @@ int main() {
             print_scale(0, 0);
             printf("\nYour Hypothesis (1-10): ");
 
-            // FIX #4: These three lines were entirely missing — code was cut off here.
-            //         Without them, the client never sends its guess and the server
-            //         blocks forever on recv(), making it look like they can't connect.
+    
             scanf("%d", &packet.guess);
-            flush_stdin(); // FIX #5
+            flush_stdin(); 
             send(sock, &packet.guess, sizeof(int), 0);
 
-            // FIX #2: Show result
+       
             int pts = score_round(packet.target, packet.guess);
             printf("You guessed %d | Target was %d | P2 +%d pts\n", packet.guess, packet.target, pts);
         }
 
         printf("\nPress Enter for next round...");
-        flush_stdin(); // FIX #5: replaces double getchar()
+        flush_stdin();
 
-    } // FIX #4: This closing brace for while(1) was also missing.
+    } 
 
     printf("=== GAME OVER ===\n");
     close(sock);

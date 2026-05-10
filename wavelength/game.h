@@ -27,8 +27,6 @@ typedef struct {
     int p1_is_psychic;
 } GamePacket;
 
-// FIX #1: Added 'static' — each .c file gets its own private copy,
-//         preventing linker conflicts.
 static Spectrum list[MAX_SPECTRUMS] = {
     {"Underrated Skill", "Overrated Skill"}, {"Terrible First Date Spot", "Perfect First Date Spot"},
     {"Awkward Conversation Topic", "Engaging Conversation Topic"}, {"Asian Parent", "Western Parent"},

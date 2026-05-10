@@ -10,7 +10,7 @@ int score_round(int target, int guess) {
     return 0;
 }
 
-// FIX #3: Replaces unreliable double-getchar() with a proper buffer flush.
+
 void flush_stdin() {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
@@ -59,7 +59,7 @@ int main() {
                 }
                 printf("\nSelection: ");
                 scanf("%d", &packet.spectrum_idx);
-                flush_stdin(); // FIX #3: flush after scanf instead of bare getchar()
+                flush_stdin();
             } else {
                 printf("ROUND %d: Player 2 is picking a category...\n", r);
             }
@@ -73,14 +73,14 @@ int main() {
             printf("SPECTRUM: %s <---> %s\n", list[packet.spectrum_idx].left, list[packet.spectrum_idx].right);
             printf("TARGET: %d\n", packet.target);
             printf("Enter Clue: ");
-            flush_stdin(); // FIX #3: flush before fgets to clear leftover newline
+            flush_stdin(); 
             fgets(packet.clue, 100, stdin);
             packet.clue[strcspn(packet.clue, "\n")] = 0;
 
             send(new_socket, &packet, sizeof(packet), 0);
             recv(new_socket, &packet.guess, sizeof(int), 0);
 
-            // FIX #2: Actually compute and award points
+           
             int pts = score_round(packet.target, packet.guess);
             packet.p2_score += pts;
             printf("\nP2 guessed %d | Target was %d | +%d pts\n", packet.guess, packet.target, pts);
@@ -91,11 +91,10 @@ int main() {
 
             printf("\nClue Received: \"%s\"\nYour Hypothesis (1-10): ", packet.clue);
             scanf("%d", &packet.guess);
-            flush_stdin(); // FIX #3
+            flush_stdin();
 
             send(new_socket, &packet.guess, sizeof(int), 0);
 
-            // FIX #2: Actually compute and award points
             int pts = score_round(packet.target, packet.guess);
             packet.p1_score += pts;
             printf("\nYou guessed %d | Target was %d | +%d pts\n", packet.guess, packet.target, pts);
@@ -106,7 +105,7 @@ int main() {
         packet.spectrum_idx = -1;
 
         printf("Press Enter for next round...");
-        flush_stdin(); // FIX #3: single reliable flush instead of getchar(); getchar();
+        flush_stdin(); 
     }
 
     clear();
