@@ -26,9 +26,9 @@ Spectrum SPECTRUMS[] = {
     {"Tell Your Strict Mom", "Tell Your Chill Dad"}, {"Worst Chore", "Most Satisfying Chore"},
     {"Weird Thing to Own", "Normal Thing to Own"}, {"Confrontational", "Avoidant"},
     {"Cancellable", "Unproblematic"}, {"Side Eye", "Full Confrontation"},
-    {"Bed Rotting", "Main Character Grind"}, {"Dramatic", "Nonchalant"},
+    {"Petty", "Justified"}, {"Dramatic", "Nonchalant"},
     {"Strict Parent", "Lenient Parent"}, {"Galing Mansyon", "Galing Kalye"},
-    {"Main Character", "NPC Energy"}, {"Chronically Online", "Touch Grass"},
+    {"Performative", "Authentic"}, {"Chronically Online", "Chronically Offline"},
     {"Soft Launch", "Hard Launch"}, {"Overthink Malala", "Walang Pake"},
     {"Clingy", "Emotionally Unavailable"}, {"Hopeless Romantic", "Hopeful Romantic"},
     {"Minimal Effort", "Overachiever Tryhard"}
